@@ -175,6 +175,19 @@ button {
 .demo-squeeze:hover {
   background: #233751;
 }
+.interaction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.reset-toy {
+  height: 45px;
+  border-radius: 999px;
+  gap: 8px;
+  padding: 0 18px;
+  font-size: 14px;
+}
 .render-error {
   position: absolute;
   top: 48%;

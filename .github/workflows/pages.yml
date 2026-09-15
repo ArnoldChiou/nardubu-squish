@@ -36,6 +36,9 @@ jobs:
       - name: Validate frost geometry
         run: node scripts/check-geometry.mjs
 
+      - name: Validate irreversible soft-body physics
+        run: node scripts/check-physics.mjs
+
       - name: Normalize project asset paths
         run: mv dist/client/nardubu-squish/_next dist/client/_next
 

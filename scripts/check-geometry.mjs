@@ -8,7 +8,7 @@ import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 const source = readFileSync(new URL('../lib/toy.ts', import.meta.url), 'utf8');
 const body = source.slice(
   source.indexOf('function frostGeometry()'),
-  source.indexOf('const deformation'),
+  source.indexOf('export function createToy'),
 );
 const compiled = ts.transpileModule(body, {
   compilerOptions: { target: ts.ScriptTarget.ES2022 },

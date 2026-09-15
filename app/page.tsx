@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Volume2, VolumeX, RotateCcw } from 'lucide-react';
+import { Volume2, VolumeX, RotateCcw, Hand } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { createToy, type ToyController } from '@/lib/toy';
@@ -62,7 +62,7 @@ export default function Home() {
           {
             name: 'squeeze_toy',
             description:
-              'Squeeze the visible 3D jelly, fracture its frost layer, and allow it to recover.',
+              'Knead the visible 3D jelly. Deformation and frost fractures remain after release.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -164,16 +164,26 @@ export default function Home() {
 
       <footer className="interaction-bar">
         <div>
-          <strong>按住 → 往內推 → 喀滋 → 放手</strong>
-          <p>電腦拖曳揉捏 · 手機雙指向內擠壓 · 戴耳機聽細碎聲</p>
+          <strong>捏下去，就留下來。</strong>
+          <p>拖曳揉捏／雙指擠壓 · 形變與裂痕持續累積 · 不會自動復原</p>
         </div>
+        <div className="interaction-actions">
         <Button
           className="demo-squeeze"
           onClick={() => controller.current?.squeeze()}
         >
-          <RotateCcw size={17} />
+          <Hand size={17} />
           示範捏一下
         </Button>
+        <Button
+          variant="outline"
+          className="reset-toy"
+          onClick={() => { controller.current?.reset(); setCount(0); }}
+        >
+          <RotateCcw size={17} />
+          重新開始
+        </Button>
+        </div>
       </footer>
     </main>
   );
