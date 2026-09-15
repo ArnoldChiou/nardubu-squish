@@ -33,8 +33,17 @@ jobs:
       - name: Build static site
         run: npm run build
 
+      - name: Validate frost geometry
+        run: node scripts/check-geometry.mjs
+
       - name: Normalize project asset paths
         run: mv dist/client/nardubu-squish/_next dist/client/_next
+
+      - name: Verify deployable entrypoint
+        run: |
+          test -s dist/client/index.html
+          test -d dist/client/_next/static/chunks
+          grep -q 'BLUEBERRY / CRUSH' dist/client/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
