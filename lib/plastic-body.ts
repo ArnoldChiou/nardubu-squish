@@ -156,7 +156,7 @@ export class PlasticBody {
       const strain = Math.abs(length / Math.max(e.length, 0.001) - 1);
       if (strain > 0.035) {
         e.length += (length - e.length) * (1 - Math.exp(-h * 6));
-        const increment = Math.max(0, strain - 0.055) * h * 3;
+        const increment = Math.max(0, strain - 0.045) * h * 4.8;
         this.damage[e.a] = Math.min(1, this.damage[e.a] + increment);
         this.damage[e.b] = Math.min(1, this.damage[e.b] + increment);
       }

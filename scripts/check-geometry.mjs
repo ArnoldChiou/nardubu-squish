@@ -20,12 +20,15 @@ const geometry = new Function(
 )(THREE, ConvexGeometry);
 const p = geometry.getAttribute('position');
 const cell = geometry.getAttribute('aCell');
+const shard = geometry.getAttribute('aShard');
 assert(p.count > 10000);
 assert.equal(cell.count, p.count);
+assert.equal(shard.count, p.count);
 for (const attr of Object.values(geometry.attributes))
   assert([...attr.array].every(Number.isFinite));
 let inward = 0;
 const cells = new Set();
+const shards = new Set();
 for (let i = 0; i < p.count; i += 3) {
   const a = new THREE.Vector3().fromBufferAttribute(p, i);
   const b = new THREE.Vector3().fromBufferAttribute(p, i + 1);
@@ -35,10 +38,17 @@ for (let i = 0; i < p.count; i += 3) {
   assert(cross.length() > 0.000001, 'degenerate surface triangle');
   if (cross.dot(a) <= 0) inward++;
   cells.add([cell.getX(i), cell.getY(i), cell.getZ(i)].join(','));
+  shards.add([shard.getX(i), shard.getY(i), shard.getZ(i)].join(','));
+  for (let j = 1; j < 3; j++) {
+    assert.equal(shard.getX(i), shard.getX(i + j), 'triangle must stay within one fragment');
+    assert.equal(shard.getY(i), shard.getY(i + j));
+    assert.equal(shard.getZ(i), shard.getZ(i + j));
+  }
 }
 assert.equal(inward, 0, 'all surfaces must face outward');
 assert.equal(cells.size, 115, 'expected connected irregular frost plates');
+assert(shards.size >= 600, 'plates must split into finer fragments');
 geometry.dispose();
 console.log(
-  `PASS: ${cells.size} frost plates; ${p.count / 3} outward triangles; finite attributes.`,
+  `PASS: ${cells.size} frost plates / ${shards.size} smaller fragments; ${p.count / 3} outward triangles; finite attributes.`,
 );

@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { CrunchAudio } from './crunch-audio';
 import { PlasticBody, type Binding, type Grip } from './plastic-body';
+import { fracturePose } from './fracture';
 
 export interface ToyController {
   setSound(enabled: boolean): void;
@@ -41,12 +42,14 @@ function frostGeometry() {
   const positions: number[] = [],
     normals: number[] = [],
     centers: number[] = [],
+    shards: number[] = [],
     colors: number[] = [];
   function triangle(
     a: THREE.Vector3,
     b: THREE.Vector3,
     c: THREE.Vector3,
     center: THREE.Vector3,
+    shard: THREE.Vector3,
     tint: THREE.Color,
     depth: number,
   ) {
@@ -54,15 +57,16 @@ function frostGeometry() {
       const ab = a.clone().add(b).normalize(),
         bc = b.clone().add(c).normalize(),
         ca = c.clone().add(a).normalize();
-      triangle(a, ab, ca, center, tint, depth - 1);
-      triangle(ab, b, bc, center, tint, depth - 1);
-      triangle(ca, bc, c, center, tint, depth - 1);
-      triangle(ab, bc, ca, center, tint, depth - 1);
+      triangle(a, ab, ca, center, shard, tint, depth - 1);
+      triangle(ab, b, bc, center, shard, tint, depth - 1);
+      triangle(ca, bc, c, center, shard, tint, depth - 1);
+      triangle(ab, bc, ca, center, shard, tint, depth - 1);
     } else
       for (const v of [a, b, c]) {
         positions.push(v.x, v.y, v.z);
         normals.push(v.x, v.y, v.z);
         centers.push(center.x, center.y, center.z);
+        shards.push(shard.x, shard.y, shard.z);
         colors.push(tint.r, tint.g, tint.b);
       }
   }
@@ -79,8 +83,10 @@ function frostGeometry() {
       0.3,
       0.7 + (Math.sin(index * 3.7) + 1) * 0.055,
     );
-    for (let i = 0; i < ring.length; i++)
-      triangle(seed, ring[i], ring[(i + 1) % ring.length], seed, tint, 2);
+    for (let i = 0; i < ring.length; i++) {
+      const shard = seed.clone().add(ring[i]).add(ring[(i + 1) % ring.length]).normalize();
+      triangle(seed, ring[i], ring[(i + 1) % ring.length], seed, shard, tint, 2);
+    }
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
@@ -89,6 +95,7 @@ function frostGeometry() {
   );
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geometry.setAttribute('aCell', new THREE.Float32BufferAttribute(centers, 3));
+  geometry.setAttribute('aShard', new THREE.Float32BufferAttribute(shards, 3));
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   return geometry;
 }
@@ -187,6 +194,7 @@ export function createToy(
   // A few lower-front windows reveal berries through the clear gel skin.
   const colorAttr = frost.geometry.getAttribute('color');
   const cellAttr = frost.geometry.getAttribute('aCell');
+  const shardAttr = frost.geometry.getAttribute('aShard');
   for (let i = 0; i < colorAttr.count; i++) {
     if (cellAttr.getY(i) < -0.15 && cellAttr.getZ(i) > 0.2) {
       colorAttr.setXYZ(
@@ -288,24 +296,44 @@ export function createToy(
       ? Array.from({ length: attr.count }, (_, i) =>
         bind(new THREE.Vector3().fromBufferAttribute(cellAttr, i).multiplyScalar(0.965).multiply(scale)))
       : null;
-    return { mesh, bindings, cells };
+    const shards = mesh === frost
+      ? Array.from({ length: attr.count }, (_, i) =>
+        bind(new THREE.Vector3().fromBufferAttribute(shardAttr, i).multiplyScalar(0.965).multiply(scale)))
+      : null;
+    return { mesh, bindings, cells, shards };
   });
   const inclusions = [...berries, ...leaves].map((item) => ({ ...item, binding: bind(item.rest) }));
-  const out = new THREE.Vector3(), cell = new THREE.Vector3();
+  const out = new THREE.Vector3(), cell = new THREE.Vector3(), shard = new THREE.Vector3();
+  const shardAxes = new Map<Binding, { axis: THREE.Vector3; seed: number }>();
+  for (const layer of layers) for (const binding of layer.shards ?? []) {
+    if (shardAxes.has(binding)) continue;
+    const normal = binding.rest.clone().normalize();
+    const axis = new THREE.Vector3(Math.abs(normal.y) > 0.9 ? 1 : 0, Math.abs(normal.y) > 0.9 ? 0 : 1, 0).cross(normal).normalize();
+    const seed = (Math.sin(binding.rest.x * 129 + binding.rest.y * 79 + binding.rest.z * 36) + 1) * 0.5;
+    shardAxes.set(binding, { axis, seed });
+  }
   const rotation = new THREE.Matrix4().makeRotationFromEuler(group.rotation);
   const updateGeometry = () => {
     let bottom = Infinity;
-    for (const { mesh, bindings, cells } of layers) {
+    const poses = new Map<Binding, ReturnType<typeof fracturePose>>();
+    for (const { mesh, bindings, cells, shards } of layers) {
       const attr = mesh.geometry.getAttribute('position');
       for (let i = 0; i < bindings.length; i++) {
         body.sample(bindings[i], out);
-        if (cells) {
-          const binding = cells[i], damage = Math.sqrt(body.damageAt(binding));
+        if (cells && shards) {
+          const binding = cells[i], piece = shards[i];
+          const { axis, seed } = shardAxes.get(piece)!;
+          let pose = poses.get(piece);
+          if (!pose) { pose = fracturePose(body.damageAt(piece), seed); poses.set(piece, pose); }
           body.sample(binding, cell);
-          // Fracture remains local and irreversible; intact outer skin contains it.
-          out.lerp(cell, damage * 0.24);
-          const r = Math.sin(binding.rest.x * 129 + binding.rest.y * 79 + binding.rest.z * 36);
-          out.addScaledVector(binding.rest, damage * r * 0.018);
+          body.sample(piece, shard);
+          // Open the main plate, then split it into smaller tilted wedges.
+          out.lerp(cell, pose.opening * 0.34);
+          shard.lerp(cell, pose.opening * 0.34);
+          out.sub(shard).multiplyScalar(1 - pose.splitting * 0.34)
+            .applyAxisAngle(axis, (seed - 0.5) * pose.splitting * 0.48).add(shard);
+          // Pieces settle inward, remaining contained by the intact gel membrane.
+          out.addScaledVector(piece.rest, -pose.opening * 0.008 - pose.splitting * (0.012 + seed * 0.014));
         }
         attr.setXYZ(i, out.x, out.y, out.z);
         if (mesh === gel) bottom = Math.min(bottom, out.applyMatrix4(rotation).y);
@@ -463,7 +491,7 @@ export function createToy(
           crackEnergy += body.broken;
           accumulator -= 1 / 120;
         }
-        if (crackEnergy > 0.035 && now - lastCrack > 100) {
+        if (crackEnergy > 0.024 && now - lastCrack > 85) {
           audio.crack(Math.min(1, 0.3 + crackEnergy));
           navigator.vibrate?.([6, 14, 4]);
           crackEnergy = 0; lastCrack = now;

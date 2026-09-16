@@ -39,6 +39,9 @@ jobs:
       - name: Validate irreversible soft-body physics
         run: node scripts/check-physics.mjs
 
+      - name: Validate crisp audio and staged fracture
+        run: node scripts/check-crunch.mjs
+
       - name: Normalize project asset paths
         run: mv dist/client/nardubu-squish/_next dist/client/_next
 

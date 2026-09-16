@@ -1,9 +1,12 @@
-/** Gesture-unlocked procedural gel friction and irregular fracture transients. */
+import { synthesizeCrack } from './crisp-crack';
+
+/** Gesture-unlocked gel friction and short, bright fracture clusters. */
 export class CrunchAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private lastFriction = 0;
+  private lastCrack = -Infinity;
   enabled = true;
 
   setEnabled(enabled: boolean) {
@@ -25,6 +28,9 @@ export class CrunchAudio {
       const limiter = this.context.createDynamicsCompressor();
       limiter.threshold.value = -14;
       limiter.ratio.value = 10;
+      limiter.knee.value = 8;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.07;
       this.master.connect(limiter).connect(this.context.destination);
       this.noise = this.context.createBuffer(
         1,
@@ -42,20 +48,19 @@ export class CrunchAudio {
     duration: number,
     frequency: number,
     amplitude: number,
-    crunchy: boolean,
   ) {
     const ctx = this.context;
     if (!ctx || !this.master || !this.noise) return;
     const source = ctx.createBufferSource();
     source.buffer = this.noise;
     const filter = ctx.createBiquadFilter();
-    filter.type = crunchy ? 'bandpass' : 'lowpass';
+    filter.type = 'lowpass';
     filter.frequency.setValueAtTime(frequency, at);
     filter.frequency.exponentialRampToValueAtTime(
       frequency * 0.42,
       at + duration,
     );
-    filter.Q.value = crunchy ? 0.7 : 1.4;
+    filter.Q.value = 0.8;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, at);
     gain.gain.exponentialRampToValueAtTime(amplitude, at + 0.003);
@@ -76,31 +81,33 @@ export class CrunchAudio {
     this.lastFriction = now;
     this.burst(
       now,
-      0.16,
-      400 + speed * 180,
-      Math.min(0.18, 0.035 + speed * 0.07),
-      false,
+      0.065,
+      Math.min(1100, 500 + speed * 140),
+      Math.min(0.055, 0.014 + speed * 0.025),
     );
   }
 
   crack(strength: number) {
-    if (!this.enabled || !this.context) return;
-    const now = this.context.currentTime;
-    for (let i = 0; i < 6; i++) {
-      this.burst(
-        now + i * 0.017 + Math.random() * 0.015,
-        0.014 + Math.random() * 0.05,
-        1100 + Math.random() * 3400,
-        (0.06 + strength * 0.14) * (1 - i / 9),
-        true,
-      );
-    }
-    this.burst(now, 0.13, 300, 0.17, false);
+    const ctx = this.context;
+    if (!this.enabled || !ctx || !this.master) return;
+    const now = ctx.currentTime;
+    if (now - this.lastCrack < 0.075) return;
+    this.lastCrack = now;
+    const data = synthesizeCrack(ctx.sampleRate, strength, Math.floor(Math.random() * 0xffffffff));
+    const buffer = ctx.createBuffer(1, data.length, ctx.sampleRate);
+    buffer.getChannelData(0).set(data);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const level = ctx.createGain();
+    level.gain.value = 0.24;
+    source.connect(level).connect(this.master);
+    source.onended = () => { source.disconnect(); level.disconnect(); };
+    source.start(now);
   }
 
   release() {
     if (!this.enabled || !this.context) return;
-    this.burst(this.context.currentTime, 0.22, 560, 0.09, false);
+    this.burst(this.context.currentTime, 0.055, 740, 0.025);
   }
 
   dispose() {
